@@ -17,7 +17,7 @@ class Highlighter(base.Highlighter):
     Finds text and adds annotations to PDF files.
     """
 
-    def highlight(self, infile, outfile, highlights):
+    def highlight(self, infile, outfile, highlights, color_index=None, reflags=None):
         annotations = []
 
         for page, layout in enumerate(extract_pages(infile, laparams=LAParams(line_margin=1.0, char_margin=4.0))):
@@ -30,7 +30,7 @@ class Highlighter(base.Highlighter):
             text = self.text(elements)
 
             for name, query in highlights:
-                results = self.search(query, text)
+                results = self.search(query, text, reflags)
                 for match in results:
                     # Matching indices
                     start, end = sys.maxsize, -1
@@ -45,8 +45,8 @@ class Highlighter(base.Highlighter):
                         end = max(end, mend)
 
                         # Colors index
-                        # index = len(annotations) % len(base.COLORS)
-                        index = 2
+                        if color_index is None:
+                            color_index = len(annotations) % len(base.COLORS)
 
                         # Detect if annotation needs to cover multiple columns
                         if elements[start][0][1] < elements[mend][0][1]:
@@ -60,11 +60,11 @@ class Highlighter(base.Highlighter):
                                     break
 
                             # Create annotation for each column
-                            annotations.append((name, base.COLORS[index], page) + self.layout(elements[start-1:start]))
-                            annotations.append((name, base.COLORS[index], page) + self.layout(elements[eindex:end+1]))
+                            annotations.append((name, base.COLORS[color_index], page) + self.layout(elements[start-1:start]))
+                            annotations.append((name, base.COLORS[color_index], page) + self.layout(elements[eindex:end+1]))
                         else:
                             # Single column annotation
-                            annotations.append((name, base.COLORS[index], page) + self.layout(elements[start:end+1]))
+                            annotations.append((name, base.COLORS[color_index], page) + self.layout(elements[start:end+1]))
 
         self.annotate(annotations, infile, outfile)
 
@@ -130,7 +130,7 @@ class Highlighter(base.Highlighter):
 
         return "".join([t for _, t in elements])
 
-    def search(self, query, text):
+    def search(self, query, text, reflags=None):
         """
         Searches a text string using input query.
 
@@ -167,7 +167,7 @@ class Highlighter(base.Highlighter):
                 subquery = "".join([q + r"\s?" for q in subquery])
 
             # Search text for matching string, count newlines to get matching line indices
-            matches = re.finditer(subquery, text, re.IGNORECASE|re.MULTILINE)
+            matches = re.finditer(subquery, text, reflags)
             allmatches.extend(matches)
         return allmatches
 
