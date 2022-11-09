@@ -30,31 +30,41 @@ class Highlighter(base.Highlighter):
             text = self.text(elements)
 
             for name, query in highlights:
-                result = self.search(query, text)
-                if result:
+                results = self.search(query, text)
+                for match in results:
+                    # Matching indices
+                    start, end = sys.maxsize, -1
                     # Unpack start/end line numbers
-                    start, end = result
+                    if match:
+                        # Get start index, only store min start across subqueries
+                        start = text.count("\n", 0, match.start())
 
-                    # Colors index
-                    index = len(annotations) % len(base.COLORS)
+                        # Get end index, adjust if ends with newline
+                        # Only store max end across subqueries
+                        mend = text.count("\n", 0, match.end())
+                        end = max(end, mend)
 
-                    # Detect if annotation needs to cover multiple columns
-                    if elements[start][0][1] < elements[end][0][1]:
-                        eindex = start
+                        # Colors index
+                        # index = len(annotations) % len(base.COLORS)
+                        index = 2
 
-                        # Get last element in first column
-                        while eindex < end:
-                            if elements[eindex][0][1] < elements[end][0][1]:
-                                eindex += 1
-                            else:
-                                break
+                        # Detect if annotation needs to cover multiple columns
+                        if elements[start][0][1] < elements[mend][0][1]:
+                            eindex = start
 
-                        # Create annotation for each column
-                        annotations.append((name, base.COLORS[index], page) + self.layout(elements[start:eindex]))
-                        annotations.append((name, base.COLORS[index], page) + self.layout(elements[eindex:end+1]))
-                    else:
-                        # Single column annotation
-                        annotations.append((name, base.COLORS[index], page) + self.layout(elements[start:end+1]))
+                            # Get last element in first column
+                            while eindex < end:
+                                if elements[eindex][0][1] < elements[end][0][1]:
+                                    eindex += 1
+                                else:
+                                    break
+
+                            # Create annotation for each column
+                            annotations.append((name, base.COLORS[index], page) + self.layout(elements[start-1:start]))
+                            annotations.append((name, base.COLORS[index], page) + self.layout(elements[eindex:end+1]))
+                        else:
+                            # Single column annotation
+                            annotations.append((name, base.COLORS[index], page) + self.layout(elements[start:end+1]))
 
         self.annotate(annotations, infile, outfile)
 
@@ -132,9 +142,6 @@ class Highlighter(base.Highlighter):
             (start, end) indices of matching elements
         """
 
-        # Matching indices
-        start, end = sys.maxsize, -1
-
         if self.formatter:
             query = self.formatter(query)
 
@@ -150,6 +157,7 @@ class Highlighter(base.Highlighter):
         else:
             subqueries = [query]
 
+        allmatches = []
         for subquery in subqueries:
             # Allow any whitespace. Handles newlines.
             subquery = subquery.replace(r"\ ", r"\s").replace(r" ", r"\s")
@@ -159,19 +167,9 @@ class Highlighter(base.Highlighter):
                 subquery = "".join([q + r"\s?" for q in subquery])
 
             # Search text for matching string, count newlines to get matching line indices
-            match = re.search(subquery, text)
-            if match:
-                # Get start index, only store min start across subqueries
-                start = min(start, text.count("\n", 0, match.start()))
-
-                # Get end index, adjust if ends with newline
-                # Only store max end across subqueries
-                mend = text.count("\n", 0, match.end())
-                if match.group().endswith("\n"):
-                    mend = max(start, mend - 1)
-                end = max(end, mend)
-
-        return (start, end) if end != -1 else None
+            matches = re.finditer(subquery, text, re.IGNORECASE|re.MULTILINE)
+            allmatches.extend(matches)
+        return allmatches
 
     def layout(self, elements):
         """
